@@ -118,16 +118,14 @@ services:
     restart: unless-stopped
     ports:
       - "${ELEMENT_PORT:-8080}:80"
+    # Mount config-init output over the image default (container user is nginx — no write).
     volumes:
-      - element-config:/element-config:ro
-    # Image ships a default /app/config.json; overwrite it from config-init.
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        set -e
-        if [ -d /app/config.json ]; then rm -rf /app/config.json; fi
-        cat /element-config/config.json > /app/config.json
-        exec /docker-entrypoint.sh nginx -g 'daemon off;'
+      - type: volume
+        source: element-config
+        target: /app/config.json
+        read_only: true
+        volume:
+          subpath: config.json
     depends_on:
       config-init:
         condition: service_completed_successfully
