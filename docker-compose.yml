@@ -1,0 +1,139 @@
+# Publishes two host ports for your reverse proxy (NPM / nginx / Caddy / …).
+# No custom Docker networks — default compose network only.
+#
+#   BRIDGE_PORT  → SPH tile + Matrix CS API (proxied to tuwunel inside the stack)
+#   ELEMENT_PORT → Element Web static UI
+#
+# Point PUBLIC_BASE_URL / ELEMENT_WEB_URL at the public https hostnames you terminate
+# on the proxy. Forward those hostnames to 127.0.0.1:$BRIDGE_PORT and :$ELEMENT_PORT.
+
+name: sph-tuwunel
+
+services:
+  config-init:
+    image: alpine:3.21
+    restart: "no"
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?}
+      ELEMENT_WEB_URL: ${ELEMENT_WEB_URL:?}
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:?}
+      JWT_SECRET: ${JWT_SECRET:?}
+    volumes:
+      - element-config:/out/element
+      - tuwunel-config:/out/tuwunel
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        PUB=$${PUBLIC_BASE_URL%/}
+        cat > /out/element/config.json <<EOF
+        {
+          "default_server_config": {
+            "m.homeserver": {
+              "base_url": "$${PUB}",
+              "server_name": "$${MATRIX_SERVER_NAME}"
+            }
+          },
+          "disable_custom_urls": true,
+          "disable_guests": true,
+          "disable_login_language_selector": true,
+          "disable_3pid_login": true,
+          "brand": "SPH Matrix",
+          "default_theme": "light",
+          "default_country_code": "DE",
+          "show_labs_settings": false,
+          "setting_defaults": { "breadcrumbs": true },
+          "integrations_ui_url": null,
+          "integrations_rest_url": null,
+          "bug_report_endpoint_url": null,
+          "roomDirectory": { "servers": ["$${MATRIX_SERVER_NAME}"] },
+          "enable_presence_by_hs_url": { "$${PUB}": false },
+          "terms_and_conditions_links": [],
+          "map_style_url": null
+        }
+        EOF
+        cat > /out/tuwunel/tuwunel.toml <<EOF
+        [global]
+        server_name = "$${MATRIX_SERVER_NAME}"
+        database_path = "/var/lib/tuwunel"
+        address = ["0.0.0.0"]
+        port = 8008
+        allow_federation = false
+        allow_registration = false
+        trusted_servers = []
+        new_user_displayname_suffix = ""
+
+        [global.jwt]
+        enable = true
+        key = "$${JWT_SECRET}"
+        format = "HMAC"
+        algorithm = "HS256"
+        register_user = true
+        EOF
+        echo "config-init ok"
+
+  bridge:
+    image: ${BRIDGE_IMAGE:-ghcr.io/alessioc42/sph_tuwunel:latest}
+    container_name: ${BRIDGE_CONTAINER_NAME:-sph-bridge}
+    restart: unless-stopped
+    ports:
+      - "${BRIDGE_PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?}
+      ELEMENT_WEB_URL: ${ELEMENT_WEB_URL:?}
+      SPH_SECRET: ${SPH_SECRET:?}
+      JWT_SECRET: ${JWT_SECRET:?}
+      MATRIX_HOMESERVER: http://tuwunel:8008
+      MATRIX_SERVER_NAME: ${MATRIX_SERVER_NAME:?}
+      ENABLE_MATRIX_PROXY: "true"
+      ALLOW_ALL_IPS: ${ALLOW_ALL_IPS:-false}
+      FOLDER_NAME: ${FOLDER_NAME:-matrix}
+      CORS_ORIGINS: ${ELEMENT_WEB_URL:?}
+      CONNECT_TTL_SECONDS: ${CONNECT_TTL_SECONDS:-30}
+      JWT_TTL_SECONDS: ${JWT_TTL_SECONDS:-3600}
+      DATA_DIR: /app/data
+    volumes:
+      - bridge-data:/app/data
+    depends_on:
+      - tuwunel
+
+  tuwunel:
+    image: ${TUWUNEL_IMAGE:-ghcr.io/matrix-construct/tuwunel:latest}
+    container_name: ${TUWUNEL_CONTAINER_NAME:-sph-tuwunel-hs}
+    restart: unless-stopped
+    # Not published — only reachable as http://tuwunel:8008 on the compose network.
+    environment:
+      TUWUNEL_CONFIG: /config/tuwunel.toml
+    volumes:
+      - tuwunel-config:/config:ro
+      - tuwunel-data:/var/lib/tuwunel
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+
+  element:
+    image: ${ELEMENT_IMAGE:-vectorim/element-web:v1.11.95}
+    container_name: ${ELEMENT_CONTAINER_NAME:-sph-element}
+    restart: unless-stopped
+    ports:
+      - "${ELEMENT_PORT:-8080}:80"
+    volumes:
+      - element-config:/element-config:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        cp /element-config/config.json /app/config.json
+        exec /docker-entrypoint.sh nginx -g 'daemon off;'
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      bridge:
+        condition: service_started
+
+volumes:
+  bridge-data:
+  tuwunel-data:
+  element-config:
+  tuwunel-config:

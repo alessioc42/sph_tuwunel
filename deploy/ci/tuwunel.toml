@@ -1,0 +1,17 @@
+# CI / local e2e homeserver config (not for production).
+[global]
+server_name = "localhost"
+database_path = "/var/lib/tuwunel"
+address = ["0.0.0.0"]
+port = 8008
+allow_federation = false
+allow_registration = false
+trusted_servers = []
+new_user_displayname_suffix = ""
+
+[global.jwt]
+enable = true
+key = "matrix-plug-e2e-local-hmac-secret-do-not-use-in-prod"
+format = "HMAC"
+algorithm = "HS256"
+register_user = true

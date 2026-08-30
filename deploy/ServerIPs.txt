@@ -1,0 +1,6 @@
+# Allowed SPH / test caller IPs (one per line). Prefix match of first 17 chars mirrors original PHP.
+127.0.0.1
+::1
+::ffff:127.0.0.1
+89.163.182.154
+2001:4ba0:133d:1::3cf

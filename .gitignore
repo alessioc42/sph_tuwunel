@@ -1,0 +1,32 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+
+# Runtime bridge state
+data/
+deploy/generated/
+deploy/tuwunel.toml
+deploy/element-config.json
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE / tooling
+.idea/
+.vscode/
+*.swp
+.bun/
+
+# Docker / compose leftovers
+docker-compose.override.yml
+
+# Test / coverage
+coverage/
+.nyc_output/
