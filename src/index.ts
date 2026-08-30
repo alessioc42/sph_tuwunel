@@ -221,11 +221,40 @@ export function createHandler(opts?: {
   }).handler;
 }
 
+/**
+ * Bun.serve default idleTimeout is 10s. Matrix `/sync` long-polls for 30s
+ * with no bytes until the poll ends, so the incoming connection looks idle
+ * and Bun resets it — NPM then returns 502 HTML without CORS.
+ * 255 is the documented maximum.
+ */
+export const BUN_IDLE_TIMEOUT_SECONDS = 255;
+
+type TimeoutServer = { timeout(request: Request, seconds: number): void };
+
+/** Disable per-request idle timeout for Client-Server long-polls and media. */
+export function disableIdleTimeoutForLongPoll(
+  req: Request,
+  server: TimeoutServer,
+): void {
+  try {
+    const path = new URL(req.url).pathname;
+    if (path.startsWith("/_matrix/")) {
+      server.timeout(req, 0);
+    }
+  } catch {
+    // ignore invalid URL
+  }
+}
+
 if (import.meta.main) {
   const { config, handler } = createApp();
   const server = Bun.serve({
     port: config.port,
-    fetch: handler,
+    idleTimeout: BUN_IDLE_TIMEOUT_SECONDS,
+    fetch(req, srv) {
+      disableIdleTimeoutForLongPoll(req, srv);
+      return handler(req);
+    },
   });
   console.log(
     `SPH bridge on ${config.publicBaseUrl} (port ${server.port}) → Cinny ${config.elementWebUrl}, HS ${config.matrixHomeserver}`,

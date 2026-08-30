@@ -232,6 +232,18 @@ docker exec -it <npm-container-name> wget -qO- http://172.17.0.1:3000/health
 | Block Common Exploits | On |
 | Websockets Support | **On** (required) |
 
+**Advanced → Custom Nginx Configuration** (required for Matrix `/sync`)
+
+Cinny long-polls `GET /_matrix/client/v3/sync?timeout=30000`. NPM’s default
+read timeout and connection retries turn a quiet wait into a **502 HTML**
+page (no CORS), which Cinny surfaces as “connecting failed”. Paste:
+
+```nginx
+proxy_read_timeout 75s;
+proxy_send_timeout 75s;
+proxy_buffering off;
+```
+
 **SSL**
 
 | Field | Value |
@@ -424,6 +436,7 @@ keep `BRIDGE_PORT=3000` and forward via `172.17.0.1:3000` instead.
 | SPH `Ungültiger Aufruf!` | Caller IP not in allowlist (`deploy/ServerIPs.txt` in image); or proxy not sending real client IP |
 | SPH `-4` | `SPH_SECRET` ≠ tile secret |
 | Cinny stays on login form | Bridge image must 302 to `/?loginToken=` (not Element `#/login?…`). Pull **and** redeploy so GHCR `:latest` and this compose both update. Cinny needs `GET /_matrix/client/v3/login` to list `m.login.token`. |
+| Cinny logs in, then **Connecting** / rooms never load | `/sync?timeout=30000` is a 30s long-poll. Pull a bridge image that sets Bun `idleTimeout` (default 10s kills the wait). In NPM Proxy Host A → Advanced, set `proxy_read_timeout 75s;` (see step 5). A 502 from OpenResty with `Content-Type: text/html` is this timeout, not a Matrix error. |
 | Cinny shows **Unhealthy** but logs look fine | Image healthcheck may use GNU wget; compose overrides it. Pull/redeploy. |
 | Cinny restart / Permission denied on `/app/config.json` | Config is volume-mounted read-only onto nginx html. Redeploy; recreate the `cinny` container. |
 | Mobile JWT missing | App User-Agent must contain `Lanis-Mobile` |

@@ -3,7 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { md5Hex } from "../src/config";
-import { createApp } from "../src/index";
+import {
+  createApp,
+  disableIdleTimeoutForLongPoll,
+} from "../src/index";
 import { SphProtocol, phpSerialize } from "../src/protocol";
 import { FileStore } from "../src/store";
 import { isLanisMobile } from "../src/ua";
@@ -138,6 +141,75 @@ describe("http integration", () => {
     );
     const body = (await res.json()) as { user_id: string };
     expect(body.user_id).toBe("@alice:example.test");
+  });
+
+  test("disableIdleTimeoutForLongPoll only for /_matrix/", () => {
+    const calls: Array<[Request, number]> = [];
+    const server = {
+      timeout(request: Request, seconds: number) {
+        calls.push([request, seconds]);
+      },
+    };
+    const sync = new Request("https://auth.test/_matrix/client/v3/sync?timeout=30000");
+    disableIdleTimeoutForLongPoll(sync, server);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]![1]).toBe(0);
+
+    calls.length = 0;
+    disableIdleTimeoutForLongPoll(new Request("https://auth.test/health"), server);
+    expect(calls).toHaveLength(0);
+  });
+
+  test("long-poll /sync survives Bun idleTimeout", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "sph-sync-"));
+    dirs.push(dataDir);
+
+    const mockHs = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const path = new URL(req.url).pathname;
+        if (path.endsWith("/sync")) {
+          await Bun.sleep(2000);
+          return Response.json({ next_batch: "s1" });
+        }
+        return new Response("no", { status: 404 });
+      },
+    });
+
+    const config = testConfig({
+      dataDir,
+      publicBaseUrl: "http://127.0.0.1",
+      elementWebUrl: "https://chat.example.test",
+      enableMatrixProxy: true,
+      matrixHomeserver: `http://127.0.0.1:${mockHs.port}`,
+    });
+    const { handler } = createApp({ config });
+    const bridge = Bun.serve({
+      port: 0,
+      idleTimeout: 1,
+      fetch(req, srv) {
+        disableIdleTimeoutForLongPoll(req, srv);
+        return handler(req);
+      },
+    });
+
+    try {
+      const started = Date.now();
+      const res = await fetch(
+        `http://127.0.0.1:${bridge.port}/_matrix/client/v3/sync?timeout=30000`,
+        { headers: { origin: "https://chat.example.test" } },
+      );
+      expect(res.status).toBe(200);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(1900);
+      const body = (await res.json()) as { next_batch: string };
+      expect(body.next_batch).toBe("s1");
+      expect(res.headers.get("access-control-allow-origin")).toBe(
+        "https://chat.example.test",
+      );
+    } finally {
+      bridge.stop(true);
+      mockHs.stop(true);
+    }
   });
 
   test("Lanis-Mobile full flow + browser Cinny redirect against live tuwunel", async () => {

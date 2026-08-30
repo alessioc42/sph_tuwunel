@@ -99,7 +99,17 @@ async function proxyToHomeserver(
     init.body = await req.arrayBuffer();
   }
 
-  const upstream = await fetch(dest, init);
+  let upstream: Response;
+  try {
+    upstream = await fetch(dest, init);
+  } catch {
+    return matrixJson(
+      req,
+      cfg,
+      { errcode: "M_UNKNOWN", error: "homeserver unreachable" },
+      502,
+    );
+  }
   const outHeaders = corsHeaders(req, cfg);
   const ct = upstream.headers.get("content-type");
   if (ct) outHeaders.set("content-type", ct);
