@@ -100,7 +100,47 @@ describe("protocol unit", () => {
 });
 
 describe("http integration", () => {
-  test("Lanis-Mobile full flow + browser Element redirect against live tuwunel", async () => {
+  test("m.login.token response includes CORS for Cinny origin", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "sph-cors-"));
+    dirs.push(dataDir);
+    const config = testConfig({
+      dataDir,
+      publicBaseUrl: "https://auth.example.test",
+      elementWebUrl: "https://chat.example.test",
+      enableMatrixProxy: true,
+      connectTtlSeconds: 60,
+    });
+    const store = new FileStore(dataDir);
+    store.putLoginToken({
+      token: "tok-cors-1",
+      session: {
+        user_id: "@alice:example.test",
+        access_token: "syt_test_token",
+        device_id: "DEVICE",
+        home_server: "example.test",
+      },
+      createdAt: Date.now(),
+    });
+    const { handler } = createApp({ config, store });
+    const res = await handler(
+      new Request("https://auth.example.test/_matrix/client/v3/login", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://chat.example.test",
+        },
+        body: JSON.stringify({ type: "m.login.token", token: "tok-cors-1" }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe(
+      "https://chat.example.test",
+    );
+    const body = (await res.json()) as { user_id: string };
+    expect(body.user_id).toBe("@alice:example.test");
+  });
+
+  test("Lanis-Mobile full flow + browser Cinny redirect against live tuwunel", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "sph-http-"));
     dirs.push(dataDir);
 
@@ -160,7 +200,7 @@ describe("http integration", () => {
         expect(body.matrix_login.type).toBe("org.matrix.login.jwt");
       }
 
-      // Browser path → Element redirect + loginToken redeem via proxy
+      // Browser path → Cinny redirect + loginToken redeem via proxy
       {
         const t = `b-${Date.now()}`;
         const challenge = await sph.step1(t, headers);
@@ -179,24 +219,28 @@ describe("http integration", () => {
         });
         expect(refreshRes.status).toBe(302);
         const loc = refreshRes.headers.get("location")!;
-        expect(loc.includes("http://127.0.0.1:8080/#/login?loginToken=")).toBe(
+        expect(loc.startsWith("http://127.0.0.1:8080/?loginToken=")).toBe(
           true,
         );
-        const hash = loc.split("#")[1] ?? "";
-        const lt = new URLSearchParams(hash.replace(/^\/?login\?/, "")).get(
-          "loginToken",
-        );
+        const lt = new URL(loc).searchParams.get("loginToken");
         expect(lt).toBeTruthy();
 
+        const elementOrigin = "http://127.0.0.1:8080";
         const loginRes = await fetch(
           `${config.publicBaseUrl}/_matrix/client/v3/login`,
           {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: {
+              "content-type": "application/json",
+              origin: elementOrigin,
+            },
             body: JSON.stringify({ type: "m.login.token", token: lt }),
           },
         );
         expect(loginRes.status).toBe(200);
+        expect(loginRes.headers.get("access-control-allow-origin")).toBe(
+          elementOrigin,
+        );
         const session = (await loginRes.json()) as {
           user_id: string;
           access_token: string;
@@ -204,16 +248,22 @@ describe("http integration", () => {
         expect(session.user_id).toBe("@lehrer.test:localhost");
         expect(session.access_token.length).toBeGreaterThan(10);
 
-        // token one-time
+        // Same token remains valid until CONNECT_TTL (Cinny may retry).
         const again = await fetch(
           `${config.publicBaseUrl}/_matrix/client/v3/login`,
           {
             method: "POST",
-            headers: { "content-type": "application/json" },
+            headers: {
+              "content-type": "application/json",
+              origin: elementOrigin,
+            },
             body: JSON.stringify({ type: "m.login.token", token: lt }),
           },
         );
-        expect(again.status).toBe(403);
+        expect(again.status).toBe(200);
+        expect(again.headers.get("access-control-allow-origin")).toBe(
+          elementOrigin,
+        );
 
         void store;
       }

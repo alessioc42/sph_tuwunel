@@ -22,7 +22,7 @@ export type ProtocolResult =
 
 /**
  * SPH-compatible protocol (mirrors index.php steps 1–4), issuing Matrix JWTs
- * (Lanis-Mobile) or Element Web loginToken redirects (browsers).
+ * (Lanis-Mobile) or Cinny loginToken redirects (browsers).
  */
 export class SphProtocol {
   constructor(
@@ -95,8 +95,8 @@ export class SphProtocol {
           this.cfg.folderName,
           `md5=${this.cfg.folderNameMd5}`,
           `Url: ${this.cfg.publicBaseUrl}/`,
-          "mode=jwt-element-bridge",
-          `element=${this.cfg.elementWebUrl}`,
+          "mode=jwt-cinny-bridge",
+          `cinny=${this.cfg.elementWebUrl}`,
         ],
       ],
     };
@@ -182,7 +182,7 @@ export class SphProtocol {
   }
 
   /**
-   * Mint JWT; Lanis-Mobile gets JSON, browsers get Element loginToken redirect.
+   * Mint JWT; Lanis-Mobile gets JSON, browsers get Cinny loginToken redirect.
    * Also used when refresh skips the intermediate exchange HTML.
    */
   async completeAuth(opts: {
@@ -217,12 +217,13 @@ export class SphProtocol {
       return { kind: "json", status: 200, body: jwtPayload };
     }
 
-    // Browser → Element Web via m.login.token handoff
+    // Browser → Cinny via m.login.token. Cinny reads window.location.search
+    // and POSTs immediately — no prior SSO click / mx_sso_hs_url required.
     try {
       const session = await loginWithJwt(
         this.cfg.matrixHomeserver,
         token,
-        "SPH Element",
+        "SPH Cinny",
       );
       const loginToken = randomToken(24);
       this.store.putLoginToken({
@@ -231,13 +232,8 @@ export class SphProtocol {
         createdAt: Date.now(),
       });
 
-      const hsForElement = this.cfg.enableMatrixProxy
-        ? this.cfg.publicBaseUrl
-        : this.cfg.matrixHomeserver;
-
       const location =
-        `${this.cfg.elementWebUrl}/#/login?loginToken=${encodeURIComponent(loginToken)}` +
-        `&homeserver=${encodeURIComponent(hsForElement)}`;
+        `${this.cfg.elementWebUrl.replace(/\/$/, "")}/?loginToken=${encodeURIComponent(loginToken)}`;
 
       return { kind: "redirect", status: 302, location };
     } catch (e) {
@@ -247,7 +243,7 @@ export class SphProtocol {
         body: page(
           "Matrix-Login fehlgeschlagen",
           `<p>${escapeHtml(String(e))}</p>
-           <p>JWT wurde erzeugt, Element-Weiterleitung nicht möglich.</p>
+           <p>JWT wurde erzeugt, Cinny-Weiterleitung nicht möglich.</p>
            <pre style="word-break:break-all;font-size:.75rem">${escapeHtml(token.slice(0, 64))}…</pre>`,
         ),
       };

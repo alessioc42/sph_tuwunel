@@ -2,7 +2,8 @@
 # No custom Docker networks — default compose network only.
 #
 #   BRIDGE_PORT  → SPH tile + Matrix CS API (proxied to tuwunel inside the stack)
-#   ELEMENT_PORT → Element Web static UI
+#   ELEMENT_PORT → Cinny static UI (env name kept so existing Portainer stacks
+#                  and NPM forwards do not need to change)
 #
 # Point PUBLIC_BASE_URL / ELEMENT_WEB_URL at the public https hostnames you terminate
 # on the proxy. Forward those hostnames to 127.0.0.1:$BRIDGE_PORT and :$ELEMENT_PORT.
@@ -26,30 +27,24 @@ services:
       - |
         set -e
         PUB=$${PUBLIC_BASE_URL%/}
+        HS=$${PUB#https://}
+        HS=$${HS#http://}
+        HS=$${HS%%/*}
         cat > /out/element/config.json <<EOF
         {
-          "default_server_config": {
-            "m.homeserver": {
-              "base_url": "$${PUB}",
-              "server_name": "$${MATRIX_SERVER_NAME}"
-            }
+          "defaultHomeserver": 0,
+          "homeserverList": ["$${HS}"],
+          "allowCustomHomeservers": false,
+          "hashRouter": {
+            "enabled": true,
+            "basename": "/"
           },
-          "disable_custom_urls": true,
-          "disable_guests": true,
-          "disable_login_language_selector": true,
-          "disable_3pid_login": true,
-          "brand": "SPH Matrix",
-          "default_theme": "light",
-          "default_country_code": "DE",
-          "show_labs_settings": false,
-          "setting_defaults": { "breadcrumbs": true },
-          "integrations_ui_url": null,
-          "integrations_rest_url": null,
-          "bug_report_endpoint_url": null,
-          "roomDirectory": { "servers": ["$${MATRIX_SERVER_NAME}"] },
-          "enable_presence_by_hs_url": { "$${PUB}": false },
-          "terms_and_conditions_links": [],
-          "map_style_url": null
+          "featuredCommunities": {
+            "openAsDefault": false,
+            "spaces": [],
+            "rooms": [],
+            "servers": ["$${MATRIX_SERVER_NAME}"]
+          }
         }
         EOF
         cat > /out/tuwunel/tuwunel.toml <<EOF
@@ -70,7 +65,7 @@ services:
         algorithm = "HS256"
         register_user = true
         EOF
-        echo "config-init ok"
+        echo "config-init ok hs=$${HS}"
 
   bridge:
     image: ${BRIDGE_IMAGE:-ghcr.io/alessioc42/sph_tuwunel:latest}
@@ -90,7 +85,7 @@ services:
       ALLOW_ALL_IPS: ${ALLOW_ALL_IPS:-false}
       FOLDER_NAME: ${FOLDER_NAME:-matrix}
       CORS_ORIGINS: ${ELEMENT_WEB_URL:?}
-      CONNECT_TTL_SECONDS: ${CONNECT_TTL_SECONDS:-30}
+      CONNECT_TTL_SECONDS: ${CONNECT_TTL_SECONDS:-120}
       JWT_TTL_SECONDS: ${JWT_TTL_SECONDS:-3600}
       DATA_DIR: /app/data
     volumes:
@@ -112,21 +107,19 @@ services:
       config-init:
         condition: service_completed_successfully
 
-  element:
-    image: ${ELEMENT_IMAGE:-vectorim/element-web:v1.11.95}
-    container_name: ${ELEMENT_CONTAINER_NAME:-sph-element}
+  cinny:
+    image: ${CINNY_IMAGE:-ajbura/cinny:v4.12.6}
+    container_name: ${CINNY_CONTAINER_NAME:-sph-cinny}
     restart: unless-stopped
     ports:
       - "${ELEMENT_PORT:-8080}:80"
-    # Mount config-init output over the image default (container user is nginx — no write).
     volumes:
       - type: volume
         source: element-config
-        target: /app/config.json
+        target: /usr/share/nginx/html/config.json
         read_only: true
         volume:
           subpath: config.json
-    # Image HEALTHCHECK uses GNU wget flags; Alpine BusyBox wget fails → false "unhealthy".
     healthcheck:
       test: ["CMD-SHELL", "wget -q -T 3 --spider http://127.0.0.1:80/config.json || exit 1"]
       interval: 30s

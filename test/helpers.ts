@@ -50,7 +50,7 @@ export function testConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     jwtSecret: "matrix-plug-e2e-local-hmac-secret-do-not-use-in-prod",
     jwtTtlSeconds: 600,
     loginTtlSeconds: 1800,
-    connectTtlSeconds: 30,
+    connectTtlSeconds: 120,
     allowAllIps: false,
     fromIps: ["127.0.0.1", "::1", "::ffff:127.0.0.1"].map((s) => s.slice(0, 17)),
     folderName: "matrix",

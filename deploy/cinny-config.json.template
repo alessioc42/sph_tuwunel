@@ -1,0 +1,15 @@
+{
+  "defaultHomeserver": 0,
+  "homeserverList": ["__HOMESERVER_HOST__"],
+  "allowCustomHomeservers": false,
+  "hashRouter": {
+    "enabled": true,
+    "basename": "/"
+  },
+  "featuredCommunities": {
+    "openAsDefault": false,
+    "spaces": [],
+    "rooms": [],
+    "servers": ["__SERVER_NAME__"]
+  }
+}

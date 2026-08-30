@@ -179,9 +179,9 @@ function homePage(c: AppConfig): string {
 <ul>
   <li>Folder: <code>${escape(c.folderName)}</code> (md5 <code>${escape(c.folderNameMd5)}</code>)</li>
   <li>Homeserver (tuwunel): <code>${escape(c.matrixHomeserver)}</code></li>
-  <li>Element Web: <code>${escape(c.elementWebUrl)}</code></li>
+  <li>Cinny: <code>${escape(c.elementWebUrl)}</code></li>
   <li>Matrix proxy: <code>${c.enableMatrixProxy ? "on" : "off"}</code></li>
-  <li>Lanis-Mobile UA → JWT JSON · Browser → Element <code>loginToken</code></li>
+  <li>Lanis-Mobile UA → JWT JSON · Browser → Cinny <code>loginToken</code></li>
 </ul>
 <p><a href="/app">Demo</a> · <a href="/health">Health</a> · <a href="/.well-known/matrix/client">well-known</a></p>
 </body></html>`;
@@ -194,10 +194,10 @@ function appPage(c: AppConfig): string {
   pre{background:#111;color:#e5e5e5;padding:1rem;border-radius:8px;overflow:auto;word-break:break-all}
 </style></head><body>
 <h1>Host demo</h1>
-<p>Browser users are redirected to Element. Lanis-Mobile receives JWT JSON on the refresh URL.</p>
-<p><a href="${escape(c.elementWebUrl)}">Open Element</a></p>
+<p>Browser users are redirected to Cinny. Lanis-Mobile receives JWT JSON on the refresh URL.</p>
+<p><a href="${escape(c.elementWebUrl)}">Open Cinny</a></p>
 <pre id="out">${escape(JSON.stringify({
-    element: c.elementWebUrl,
+    cinny: c.elementWebUrl,
     homeserver_public: c.enableMatrixProxy ? c.publicBaseUrl : c.matrixHomeserver,
     lanis: 'User-Agent: … Lanis-Mobile … → JWT',
   }, null, 2))}</pre>
@@ -228,6 +228,6 @@ if (import.meta.main) {
     fetch: handler,
   });
   console.log(
-    `SPH bridge on ${config.publicBaseUrl} (port ${server.port}) → Element ${config.elementWebUrl}, HS ${config.matrixHomeserver}`,
+    `SPH bridge on ${config.publicBaseUrl} (port ${server.port}) → Cinny ${config.elementWebUrl}, HS ${config.matrixHomeserver}`,
   );
 }

@@ -12,6 +12,7 @@ data/
 deploy/generated/
 deploy/tuwunel.toml
 deploy/element-config.json
+deploy/cinny-config.json
 
 # Logs & OS
 *.log

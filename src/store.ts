@@ -84,7 +84,7 @@ export class FileStore {
     writeFileSync(this.path(`lt_${safe(rec.token)}.json`), JSON.stringify(rec));
   }
 
-  /** Peek without consuming (Element may retry). */
+  /** Peek without consuming (Cinny may retry). */
   getLoginToken(token: string): LoginTokenRecord | null {
     try {
       return JSON.parse(

@@ -20,19 +20,22 @@ fi
 PUB="${PUBLIC_BASE_URL%/}"
 CHAT="${ELEMENT_WEB_URL%/}"
 SERVER_NAME="${MATRIX_SERVER_NAME}"
+HS="${PUB#https://}"
+HS="${HS#http://}"
+HS="${HS%%/*}"
 
 mkdir -p deploy/generated
 
-sed -e "s|__PUBLIC_BASE_URL__|${PUB}|g" \
+sed -e "s|__HOMESERVER_HOST__|${HS}|g" \
     -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
-    deploy/element-config.json.template > deploy/generated/element-config.json
+    deploy/cinny-config.json.template > deploy/generated/cinny-config.json
 
 sed -e "s|__SERVER_NAME__|${SERVER_NAME}|g" \
     -e "s|__JWT_SECRET__|${JWT_SECRET}|g" \
     deploy/tuwunel.toml.template > deploy/generated/tuwunel.toml
 
 echo "Rendered for local/non-Portainer use:"
-echo "  Element homeserver base_url: ${PUB}"
-echo "  Element Web:                 ${CHAT}"
-echo "  SPH tile URL:                ${PUB}/"
-echo "  Folder name:                 ${FOLDER_NAME:-matrix}"
+echo "  Cinny homeserverList host: ${HS}"
+echo "  Cinny Web:                 ${CHAT}"
+echo "  SPH tile URL:              ${PUB}/"
+echo "  Folder name:               ${FOLDER_NAME:-matrix}"

@@ -3,7 +3,11 @@ import type { FileStore } from "./store";
 
 /**
  * Reverse-proxy Matrix Client-Server API to tuwunel, intercepting
- * `m.login.token` so Element Web can finish SSO-style handoff.
+ * `m.login.token` so Cinny can finish the SPH handoff.
+ *
+ * Cinny (CHAT_HOST) and the bridge (PUBLIC_BASE_URL) are different
+ * origins — every Matrix response must carry CORS, including the
+ * loginToken intercept path.
  */
 export async function handleMatrixProxy(
   req: Request,
@@ -24,27 +28,30 @@ export async function handleMatrixProxy(
     try {
       body = JSON.parse(raw) as { type?: string; token?: string };
     } catch {
-      return json({ errcode: "M_BAD_JSON", error: "Bad JSON" }, 400);
+      return matrixJson(req, cfg, { errcode: "M_BAD_JSON", error: "Bad JSON" }, 400);
     }
 
     if (body.type === "m.login.token" && body.token) {
       const rec = store.getLoginToken(body.token);
       if (!rec) {
-        return json(
+        return matrixJson(
+          req,
+          cfg,
           { errcode: "M_FORBIDDEN", error: "Invalid login token" },
           403,
         );
       }
       if (Date.now() - rec.createdAt > cfg.connectTtlSeconds * 1000) {
         store.takeLoginToken(body.token);
-        return json(
+        return matrixJson(
+          req,
+          cfg,
           { errcode: "M_FORBIDDEN", error: "Login token expired" },
           403,
         );
       }
-      // Consume after successful read so token is one-time.
-      store.takeLoginToken(body.token);
-      return json({
+      // Keep until TTL so Cinny retries (Strict Mode / flaky net) still work.
+      return matrixJson(req, cfg, {
         user_id: rec.session.user_id,
         access_token: rec.session.access_token,
         device_id: rec.session.device_id,
@@ -93,25 +100,45 @@ async function proxyToHomeserver(
   }
 
   const upstream = await fetch(dest, init);
-  const outHeaders = new Headers();
+  const outHeaders = corsHeaders(req, cfg);
   const ct = upstream.headers.get("content-type");
   if (ct) outHeaders.set("content-type", ct);
-  // Element on another origin needs CORS when not same-site.
-  const origin = req.headers.get("origin");
-  if (origin && isAllowedOrigin(origin, cfg)) {
-    outHeaders.set("access-control-allow-origin", origin);
-    outHeaders.set("access-control-allow-credentials", "true");
-    outHeaders.set(
-      "access-control-allow-headers",
-      "Authorization, Content-Type, Accept",
-    );
-    outHeaders.set("access-control-allow-methods", "GET, POST, PUT, DELETE, OPTIONS");
-  }
 
   return new Response(upstream.body, {
     status: upstream.status,
     headers: outHeaders,
   });
+}
+
+/** CORS headers for Cinny ↔ bridge cross-origin Matrix calls. */
+export function corsHeaders(req: Request, cfg: AppConfig): Headers {
+  const out = new Headers();
+  const origin = req.headers.get("origin");
+  if (origin && isAllowedOrigin(origin, cfg)) {
+    out.set("access-control-allow-origin", origin);
+    out.set("access-control-allow-credentials", "true");
+    out.set(
+      "access-control-allow-headers",
+      "Authorization, Content-Type, Accept",
+    );
+    out.set(
+      "access-control-allow-methods",
+      "GET, POST, PUT, DELETE, OPTIONS",
+    );
+    out.set("vary", "Origin");
+  }
+  return out;
+}
+
+function matrixJson(
+  req: Request,
+  cfg: AppConfig,
+  body: unknown,
+  status = 200,
+): Response {
+  const headers = corsHeaders(req, cfg);
+  headers.set("content-type", "application/json");
+  return new Response(JSON.stringify(body), { status, headers });
 }
 
 export function isAllowedOrigin(origin: string, cfg: AppConfig): boolean {
@@ -127,9 +154,3 @@ export function isAllowedOrigin(origin: string, cfg: AppConfig): boolean {
   }
 }
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}

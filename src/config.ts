@@ -17,9 +17,10 @@ export type AppConfig = {
   matrixHomeserver: string;
   /** Public Matrix server_name (MXID domain), e.g. localhost or matrix.schule.de */
   matrixServerName: string;
-  /** Element Web base URL (no trailing slash). Browser users are sent here. */
+  /** Cinny (web UI) base URL (no trailing slash). Browser users are sent here.
+   *  Env name stays ELEMENT_WEB_URL so existing Portainer stacks keep working. */
   elementWebUrl: string;
-  /** When true, proxy /_matrix/* to matrixHomeserver (needed for Element loginToken). */
+  /** When true, proxy /_matrix/* to matrixHomeserver (needed for Cinny loginToken). */
   enableMatrixProxy: boolean;
   corsOrigins: string[];
   dataDir: string;
@@ -103,7 +104,7 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     ),
     jwtTtlSeconds: Number(process.env.JWT_TTL_SECONDS ?? 3600),
     loginTtlSeconds: Number(process.env.LOGIN_TTL_SECONDS ?? 1800),
-    connectTtlSeconds: Number(process.env.CONNECT_TTL_SECONDS ?? 30),
+    connectTtlSeconds: Number(process.env.CONNECT_TTL_SECONDS ?? 120),
     allowAllIps: envBool("ALLOW_ALL_IPS", false),
     fromIps,
     folderName,

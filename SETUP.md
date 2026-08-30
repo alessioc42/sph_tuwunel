@@ -10,7 +10,7 @@ Replace every placeholder before you start:
 | --- | --- |
 | `YOUR_DOMAIN` | `meine-schule.de` |
 | `AUTH_HOST` | `sph-auth.svc.meine-schule.de` |
-| `CHAT_HOST` | `element.svc.meine-schule.de` |
+| `CHAT_HOST` | `chat.svc.meine-schule.de` |
 | `BRIDGE_PORT` | `3000` |
 | `ELEMENT_PORT` | `8080` |
 
@@ -22,9 +22,9 @@ Internet │
  Nginx Proxy Manager  (:443 TLS)
          │
          ├─ AUTH_HOST  ──http──►  host port BRIDGE_PORT  ──►  sph-bridge
-         └─ CHAT_HOST  ──http──►  host port ELEMENT_PORT ──►  sph-element
+         └─ CHAT_HOST  ──http──►  host port ELEMENT_PORT ──►  sph-cinny
                                       │
-                         Portainer stack: bridge + element + tuwunel
+                         Portainer stack: bridge + cinny + tuwunel
                          (tuwunel has no host port)
 ```
 
@@ -54,7 +54,7 @@ Example:
 
 ```text
 sph-auth.svc.meine-schule.de    A    203.0.113.10
-element.svc.meine-schule.de     A    203.0.113.10
+chat.svc.meine-schule.de        A    203.0.113.10
 ```
 
 Wait until they resolve (`dig +short AUTH_HOST`).
@@ -136,14 +136,14 @@ BRIDGE_PORT=3000
 ELEMENT_PORT=8080
 
 BRIDGE_IMAGE=ghcr.io/alessioc42/sph_tuwunel:latest
-ELEMENT_IMAGE=vectorim/element-web:v1.11.95
+CINNY_IMAGE=ajbura/cinny:v4.12.6
 TUWUNEL_IMAGE=ghcr.io/matrix-construct/tuwunel:latest
 
 BRIDGE_CONTAINER_NAME=sph-bridge
-ELEMENT_CONTAINER_NAME=sph-element
+CINNY_CONTAINER_NAME=sph-cinny
 TUWUNEL_CONTAINER_NAME=sph-tuwunel-hs
 
-CONNECT_TTL_SECONDS=30
+CONNECT_TTL_SECONDS=120
 JWT_TTL_SECONDS=3600
 ```
 
@@ -151,7 +151,7 @@ Concrete example (do not copy secrets from docs into production):
 
 ```bash
 PUBLIC_BASE_URL=https://sph-auth.svc.meine-schule.de
-ELEMENT_WEB_URL=https://element.svc.meine-schule.de
+ELEMENT_WEB_URL=https://chat.svc.meine-schule.de
 MATRIX_SERVER_NAME=meine-schule.de
 SPH_SECRET=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEf
 JWT_SECRET=ZyXwVuTsRqPoNmLkJiHgFeDcBa9876543210ZyXwVuTs
@@ -160,10 +160,10 @@ ALLOW_ALL_IPS=false
 BRIDGE_PORT=3000
 ELEMENT_PORT=8080
 BRIDGE_IMAGE=ghcr.io/alessioc42/sph_tuwunel:latest
-ELEMENT_IMAGE=vectorim/element-web:v1.11.95
+CINNY_IMAGE=ajbura/cinny:v4.12.6
 TUWUNEL_IMAGE=ghcr.io/matrix-construct/tuwunel:latest
 BRIDGE_CONTAINER_NAME=sph-bridge
-ELEMENT_CONTAINER_NAME=sph-element
+CINNY_CONTAINER_NAME=sph-cinny
 TUWUNEL_CONTAINER_NAME=sph-tuwunel-hs
 ```
 
@@ -175,7 +175,7 @@ TUWUNEL_CONTAINER_NAME=sph-tuwunel-hs
 | `sph-tuwunel-config-init-…` | one-shot config writer | exits 0 |
 | `sph-tuwunel-hs` | Matrix homeserver | none |
 | `sph-bridge` | SPH + Matrix API | `BRIDGE_PORT` → 3000 |
-| `sph-element` | Element Web | `ELEMENT_PORT` → 80 |
+| `sph-cinny` | Cinny | `ELEMENT_PORT` → 80 |
 
 7. In Portainer → Containers → `sph-bridge` → **Logs**: should show the bridge
    listening.  
@@ -186,7 +186,7 @@ curl -fsS http://127.0.0.1:3000/health
 curl -fsS http://127.0.0.1:8080/ | head
 ```
 
-Expected: JSON with `"ok": true` from `/health`, and HTML from Element.
+Expected: JSON with `"ok": true` from `/health`, and HTML from Cinny.
 
 If `/health` fails: open `sph-bridge` logs; usually wrong env, image pull, or
 port conflict.
@@ -245,13 +245,13 @@ docker exec -it <npm-container-name> wget -qO- http://172.17.0.1:3000/health
 
 Save.
 
-### Proxy Host B — Element
+### Proxy Host B — Cinny
 
 **Details**
 
 | Field | Value |
 | --- | --- |
-| Domain Names | `CHAT_HOST` (e.g. `element.svc.meine-schule.de`) |
+| Domain Names | `CHAT_HOST` (e.g. `chat.svc.meine-schule.de`) |
 | Scheme | `http` |
 | Forward Hostname / IP | same as Proxy Host A |
 | Forward Port | `8080` (your `ELEMENT_PORT`) |
@@ -285,7 +285,7 @@ server {
   }
 }
 
-# element
+# cinny
 server {
   listen 443 ssl http2;
   server_name CHAT_HOST;
@@ -321,7 +321,7 @@ curl -fsSI https://CHAT_HOST/ | head
 { "m.homeserver": { "base_url": "https://AUTH_HOST" } }
 ```
 
-Open `https://CHAT_HOST/` in a browser — Element should load (login may wait
+Open `https://CHAT_HOST/` in a browser — Cinny should load (login may wait
 until you use the SPH tile).
 
 ---
@@ -352,10 +352,10 @@ Name / Beschreibung / Logo / Farbe: free text for the tile.
 
 1. Log into Schulportal as a normal user.  
 2. Click the tile.  
-3. **Desktop browser** → should redirect to Element on `CHAT_HOST` and land
-   signed in.  
+3. **Desktop browser** → should redirect to Cinny on `CHAT_HOST` (`/?loginToken=…`)
+   and land signed in.  
 4. **Lanis-Mobile** (User-Agent contains `Lanis-Mobile`) → same flow returns a
-   JWT JSON body for the app instead of an Element redirect.
+   JWT JSON body for the app instead of a Cinny redirect.
 
 ---
 
@@ -368,12 +368,12 @@ On `https://AUTH_HOST` (bridge):
 | `/?t=…` | SPH servers | Handshake step 1 |
 | `/?a=login&…` | SPH servers | Handshake step 2 → refresh URL |
 | `/?a=refresh&k=…` | User browser / app | Finish login |
-| `/_matrix/…` | Element | Client-Server API (proxied to tuwunel) |
+| `/_matrix/…` | Cinny | Client-Server API (proxied to tuwunel) |
 | `/.well-known/matrix/client` | Clients | Points at this bridge |
 | `/health` | You | Liveness |
 
-On `https://CHAT_HOST`: Element static UI only. Its configured homeserver is
-`https://AUTH_HOST` (written by `config-init` from `PUBLIC_BASE_URL`).
+On `https://CHAT_HOST`: Cinny static UI only. Its `homeserverList` host is
+the hostname of `PUBLIC_BASE_URL` (written by `config-init`).
 
 ---
 
@@ -387,8 +387,10 @@ After changing `JWT_SECRET`, `PUBLIC_BASE_URL`, `ELEMENT_WEB_URL`, or
 
 1. Update the stack env.  
 2. Redeploy so `config-init` runs again.  
-3. If Element still shows the old homeserver, remove the stack volume named
-   like `sph-tuwunel_element-config`, then redeploy once.
+3. If Cinny still shows the old homeserver list, remove the stack volume named
+   like `sph-tuwunel_element-config`, then redeploy once so `config-init`
+   writes a Cinny `config.json`. You can leave a leftover `ELEMENT_IMAGE`
+   env var in Portainer; compose no longer reads it.
 
 If you change `SPH_SECRET`, also update the Schulportal tile secret.
 
@@ -421,9 +423,9 @@ keep `BRIDGE_PORT=3000` and forward via `172.17.0.1:3000` instead.
 | Let’s Encrypt fails | DNS not pointing here yet; port 80 not reachable on NPM |
 | SPH `Ungültiger Aufruf!` | Caller IP not in allowlist (`deploy/ServerIPs.txt` in image); or proxy not sending real client IP |
 | SPH `-4` | `SPH_SECRET` ≠ tile secret |
-| Element stays on password screen | `PUBLIC_BASE_URL` wrong; Element must use bridge as homeserver; re-run config-init |
-| Element shows **Unhealthy** but logs look fine | Image healthcheck used GNU wget; fixed in compose. Pull/redeploy. Nginx “user” warning is harmless. |
-| Element restart / Permission denied on `/app/config.json` | Pull latest compose (config is volume-mounted read-only). Redeploy; recreate the `element` container. |
+| Cinny stays on login form | Bridge image must 302 to `/?loginToken=` (not Element `#/login?…`). Pull **and** redeploy so GHCR `:latest` and this compose both update. Cinny needs `GET /_matrix/client/v3/login` to list `m.login.token`. |
+| Cinny shows **Unhealthy** but logs look fine | Image healthcheck may use GNU wget; compose overrides it. Pull/redeploy. |
+| Cinny restart / Permission denied on `/app/config.json` | Config is volume-mounted read-only onto nginx html. Redeploy; recreate the `cinny` container. |
 | Mobile JWT missing | App User-Agent must contain `Lanis-Mobile` |
 
 ---
@@ -440,6 +442,6 @@ keep `BRIDGE_PORT=3000` and forward via `172.17.0.1:3000` instead.
 - [ ] `https://AUTH_HOST/health` OK  
 - [ ] `https://AUTH_HOST/.well-known/matrix/client` shows bridge base_url  
 - [ ] SPH tile URL `https://AUTH_HOST/`, secret matches, folder `matrix`  
-- [ ] Browser click through SPH → Element signed in  
+- [ ] Browser click through SPH → Cinny signed in  
 
 That is the full path from empty Portainer to a working SPH tile.
