@@ -120,11 +120,13 @@ services:
       - "${ELEMENT_PORT:-8080}:80"
     volumes:
       - element-config:/element-config:ro
+    # Image ships a default /app/config.json; overwrite it from config-init.
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        cp /element-config/config.json /app/config.json
+        if [ -d /app/config.json ]; then rm -rf /app/config.json; fi
+        cat /element-config/config.json > /app/config.json
         exec /docker-entrypoint.sh nginx -g 'daemon off;'
     depends_on:
       config-init:

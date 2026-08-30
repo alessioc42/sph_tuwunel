@@ -422,7 +422,7 @@ keep `BRIDGE_PORT=3000` and forward via `172.17.0.1:3000` instead.
 | SPH `Ungültiger Aufruf!` | Caller IP not in allowlist (`deploy/ServerIPs.txt` in image); or proxy not sending real client IP |
 | SPH `-4` | `SPH_SECRET` ≠ tile secret |
 | Element stays on password screen | `PUBLIC_BASE_URL` wrong; Element must use bridge as homeserver; re-run config-init |
-| Chat connects then dies | Websockets **Off** on the **bridge** Proxy Host — turn **On** |
+| Element restart loop / `cp: can't create '/app/config.json'` | Pull latest compose (`cat >` overwrite). Redeploy the stack. |
 | Mobile JWT missing | App User-Agent must contain `Lanis-Mobile` |
 
 ---
