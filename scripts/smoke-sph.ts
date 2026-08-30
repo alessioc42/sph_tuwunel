@@ -65,9 +65,12 @@ async function sphLogin(userPayload: string): Promise<string> {
     process.exit(1);
   }
   const loc = res.headers.get("location") ?? "";
-  const hash = loc.split("#")[1] ?? "";
-  const params = new URLSearchParams(hash.replace(/^\/?login\?/, ""));
-  const loginToken = params.get("loginToken");
+  let loginToken: string | null = null;
+  try {
+    loginToken = new URL(loc).searchParams.get("loginToken");
+  } catch {
+    loginToken = null;
+  }
   if (!loginToken) {
     console.error("no loginToken in", loc);
     process.exit(1);
