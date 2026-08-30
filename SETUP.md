@@ -13,7 +13,6 @@ Replace every placeholder before you start:
 | `CHAT_HOST` | `element.svc.meine-schule.de` |
 | `BRIDGE_PORT` | `3000` |
 | `ELEMENT_PORT` | `8080` |
-| `DOCKER_HOST_IP` | IP of the machine that runs Portainer/Docker (for NPM forward) |
 
 ```text
 DNS  AUTH_HOST / CHAT_HOST  →  your server
@@ -22,8 +21,8 @@ Internet │
          ▼
  Nginx Proxy Manager  (:443 TLS)
          │
-         ├─ AUTH_HOST  ──http──►  DOCKER_HOST_IP:BRIDGE_PORT  ──►  sph-bridge
-         └─ CHAT_HOST  ──http──►  DOCKER_HOST_IP:ELEMENT_PORT ──►  sph-element
+         ├─ AUTH_HOST  ──http──►  host port BRIDGE_PORT  ──►  sph-bridge
+         └─ CHAT_HOST  ──http──►  host port ELEMENT_PORT ──►  sph-element
                                       │
                          Portainer stack: bridge + element + tuwunel
                          (tuwunel has no host port)
@@ -196,24 +195,26 @@ port conflict.
 
 ## 5. Nginx Proxy Manager — two Proxy Hosts
 
-NPM must reach the **Docker host ports** (`BRIDGE_PORT` / `ELEMENT_PORT`).
-It does **not** need to share a Docker network with this stack.
+The stack already publishes `BRIDGE_PORT` and `ELEMENT_PORT` on the Docker
+host. In NPM you only forward each domain to that host port — same as any other
+app you already proxy.
 
-### How to choose “Forward Hostname / IP”
+**Forward Hostname / IP** is almost always:
 
-| Where NPM runs | Forward Hostname / IP |
+| NPM setup | Use |
 | --- | --- |
-| Same machine as Portainer/Docker, NPM in Docker | Host gateway, often `172.17.0.1` or `host.docker.internal` |
-| Same machine, NPM as system service (not container) | `127.0.0.1` |
-| Different machine on LAN | LAN IP of the Docker host |
+| NPM installed on the host (not a container) | `127.0.0.1` |
+| NPM in Docker on the **same** host | `172.17.0.1` (Docker bridge gateway) or `host.docker.internal` if your NPM image supports it |
+| NPM on another machine | the LAN IP of the Docker host |
 
-Quick test from **inside the NPM container**:
+You do **not** add this to the Portainer stack env. It is only the target in the
+NPM UI.
+
+Check from the NPM container if needed:
 
 ```bash
 docker exec -it <npm-container-name> wget -qO- http://172.17.0.1:3000/health
 ```
-
-Use whichever IP returns JSON with `"ok": true`.
 
 ### Proxy Host A — bridge (SPH + Matrix)
 
@@ -225,7 +226,7 @@ Use whichever IP returns JSON with `"ok": true`.
 | --- | --- |
 | Domain Names | `AUTH_HOST` (e.g. `sph-auth.svc.meine-schule.de`) |
 | Scheme | `http` |
-| Forward Hostname / IP | `DOCKER_HOST_IP` (see table above) |
+| Forward Hostname / IP | `127.0.0.1` or `172.17.0.1` (see table above) |
 | Forward Port | `3000` (your `BRIDGE_PORT`) |
 | Cache Assets | Off |
 | Block Common Exploits | On |
@@ -252,7 +253,7 @@ Save.
 | --- | --- |
 | Domain Names | `CHAT_HOST` (e.g. `element.svc.meine-schule.de`) |
 | Scheme | `http` |
-| Forward Hostname / IP | same `DOCKER_HOST_IP` as above |
+| Forward Hostname / IP | same as Proxy Host A |
 | Forward Port | `8080` (your `ELEMENT_PORT`) |
 | Block Common Exploits | On |
 | Websockets Support | **On** |
@@ -416,7 +417,7 @@ keep `BRIDGE_PORT=3000` and forward via `172.17.0.1:3000` instead.
 | Stack deploy: git clone failed | Enable repo authentication; PAT needs `repo` for private git |
 | `config-init` exited non-zero | Missing env var; open its logs in Portainer |
 | `curl localhost:3000/health` fails | Port conflict; `docker ps` / change `BRIDGE_PORT` |
-| NPM 502 | Wrong forward IP (try `172.17.0.1`); wrong port; bridge not running |
+| NPM 502 | Wrong forward target (`127.0.0.1` vs `172.17.0.1`); wrong port; bridge not running |
 | Let’s Encrypt fails | DNS not pointing here yet; port 80 not reachable on NPM |
 | SPH `Ungültiger Aufruf!` | Caller IP not in allowlist (`deploy/ServerIPs.txt` in image); or proxy not sending real client IP |
 | SPH `-4` | `SPH_SECRET` ≠ tile secret |
@@ -433,8 +434,8 @@ keep `BRIDGE_PORT=3000` and forward via `172.17.0.1:3000` instead.
 - [ ] Portainer registry `ghcr.io` configured  
 - [ ] Stack deployed with full env  
 - [ ] `http://127.0.0.1:BRIDGE_PORT/health` OK on Docker host  
-- [ ] NPM Proxy Host A → `DOCKER_HOST_IP:BRIDGE_PORT`, websockets on, SSL on  
-- [ ] NPM Proxy Host B → `DOCKER_HOST_IP:ELEMENT_PORT`, websockets on, SSL on  
+- [ ] NPM Proxy Host A → host port `BRIDGE_PORT`, websockets on, SSL on  
+- [ ] NPM Proxy Host B → host port `ELEMENT_PORT`, websockets on, SSL on  
 - [ ] `https://AUTH_HOST/health` OK  
 - [ ] `https://AUTH_HOST/.well-known/matrix/client` shows bridge base_url  
 - [ ] SPH tile URL `https://AUTH_HOST/`, secret matches, folder `matrix`  
